@@ -1,0 +1,30 @@
+{
+  "source_url": "https://nextcloud-url.cm/2sWLBzk",
+  "source_subdir": "/C",
+  "source_type": "nextcloud",
+  "target_dir": "C:/Synced/target_folder",
+  "password": "",
+  "retries": 3,
+  "timeout": 30,
+  "log_level": "INFO",
+  "pipelines": [
+    {
+      "pattern": "\\.webm$",
+      "delete_original": false,
+      "commands": [
+        "ffmpeg -i {file} -c:v libx264 {file_stem}.mp4",
+        "python some_tool.py --input {file_stem}.mp4"
+      ]
+    },
+    {
+      "pattern": "\\.mp4$",
+      "commands": [
+        "python some_tool.py --input {file}"
+      ]
+    }
+  ],
+  "post_sync": [
+    "python rebuild_index.py --dir {target_dir}",
+    "echo Sync complete"
+  ]
+}

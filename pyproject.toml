@@ -1,0 +1,45 @@
+[project]
+name = "sync-to-local"
+version = "0.1.0"
+description = "CLI tool to sync files from remote sources (Nextcloud, etc.) to local folders with post-download pipelines"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27,<1",
+    "tenacity>=8.2,<10",
+]
+
+[project.scripts]
+sync-to-local = "sync_to_local:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.22",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sync_to_local"]
