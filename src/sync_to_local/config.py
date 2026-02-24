@@ -1,4 +1,4 @@
-"""Configuration loading and merging for sync-to-local."""
+"""Configuration loading and merging for sync-to-local and sync-to-remote."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from sync_to_local.constants import (
     DEFAULT_LOG_LEVEL,
     DEFAULT_RETRIES,
     DEFAULT_SOURCE_TYPE,
+    DEFAULT_TARGET_TYPE,
     DEFAULT_TIMEOUT,
 )
 
@@ -149,4 +150,112 @@ def _config_to_dict(config: SyncConfig) -> dict[str, Any]:
         "post_sync": config.post_sync,
         "index_only": config.index_only,
         "manifest_path": str(config.manifest_path) if config.manifest_path else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Upload configuration (sync-to-remote)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class UploadConfig:
+    """All configuration for an upload (sync-to-remote) run."""
+
+    source_dir: Path
+    target_url: str
+    target_type: str = DEFAULT_TARGET_TYPE
+    target_subdir: str = ""
+    password: str = ""
+    retries: int = DEFAULT_RETRIES
+    timeout: int = DEFAULT_TIMEOUT
+    log_level: str = DEFAULT_LOG_LEVEL
+    index_only: bool = False
+    manifest_path: Path | None = None
+    file_filter: str = ""
+
+
+def load_upload_config(config_path: Path) -> UploadConfig:
+    """Load an UploadConfig from a JSON file."""
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(config_path) as f:
+        data: dict[str, Any] = json.load(f)
+
+    return _dict_to_upload_config(data)
+
+
+def merge_upload_cli_args(
+    base: UploadConfig | None,
+    cli_overrides: dict[str, Any],
+) -> UploadConfig:
+    """Merge CLI arguments on top of a base upload config.
+
+    CLI values that are None are treated as "not provided" and skipped.
+    The ``?dir=`` query parameter in target_url is extracted as target_subdir
+    unless an explicit target_subdir is provided.
+    """
+    merged: dict[str, Any] = _upload_config_to_dict(base) if base is not None else {}
+
+    for key, value in cli_overrides.items():
+        if value is not None:
+            merged[key] = value
+
+    # Extract ?dir= from target_url if present
+    target_url = merged.get("target_url")
+    if not target_url:
+        raise ValueError("target_url is required")
+
+    parsed = urlparse(target_url)
+    dir_params = parse_qs(parsed.query).get("dir", [])
+
+    if dir_params:
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        merged["target_url"] = clean_url
+
+        explicit_subdir = cli_overrides.get("target_subdir")
+        if not explicit_subdir and not merged.get("target_subdir"):
+            merged["target_subdir"] = dir_params[0]
+
+    if not merged.get("source_dir"):
+        raise ValueError("source_dir is required")
+
+    return _dict_to_upload_config(merged)
+
+
+def _dict_to_upload_config(data: dict[str, Any]) -> UploadConfig:
+    """Convert a raw dict to an UploadConfig."""
+    source_dir = data.get("source_dir", "")
+    manifest_path = data.get("manifest_path")
+
+    return UploadConfig(
+        source_dir=Path(source_dir) if isinstance(source_dir, str) else source_dir,
+        target_url=data["target_url"],
+        target_type=data.get("target_type", DEFAULT_TARGET_TYPE),
+        target_subdir=data.get("target_subdir", ""),
+        password=data.get("password", ""),
+        retries=data.get("retries", DEFAULT_RETRIES),
+        timeout=data.get("timeout", DEFAULT_TIMEOUT),
+        log_level=data.get("log_level", DEFAULT_LOG_LEVEL),
+        index_only=data.get("index_only", False),
+        manifest_path=Path(manifest_path) if manifest_path else None,
+        file_filter=data.get("file_filter", ""),
+    )
+
+
+def _upload_config_to_dict(config: UploadConfig) -> dict[str, Any]:
+    """Convert an UploadConfig back to a dict for merging."""
+    return {
+        "source_dir": config.source_dir,
+        "target_url": config.target_url,
+        "target_type": config.target_type,
+        "target_subdir": config.target_subdir,
+        "password": config.password,
+        "retries": config.retries,
+        "timeout": config.timeout,
+        "log_level": config.log_level,
+        "index_only": config.index_only,
+        "manifest_path": str(config.manifest_path) if config.manifest_path else None,
+        "file_filter": config.file_filter,
     }

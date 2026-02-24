@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import logging
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import urlparse
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from sync_to_local.config import SyncConfig
 from sync_to_local.sources.base import RemoteFile, SourceBase
+from sync_to_local.webdav_utils import parse_share_url
 
 logger = logging.getLogger(__name__)
 
@@ -20,28 +19,12 @@ DAV_NS = "DAV:"
 OC_NS = "http://owncloud.org/ns"
 
 
-def _parse_share_url(source_url: str) -> tuple[str, str]:
-    """Extract base URL and share token from a Nextcloud public share URL.
-
-    Example: https://share.example.com/s/PcLf3SWw2sWLBzk
-    Returns: ("https://share.example.com", "PcLf3SWw2sWLBzk")
-    """
-    parsed = urlparse(source_url)
-    base_url = f"{parsed.scheme}://{parsed.netloc}"
-    # Token is the last path segment after /s/
-    match = re.search(r"/s/([^/?]+)", parsed.path)
-    if not match:
-        raise ValueError(f"Cannot extract share token from URL: {source_url}")
-    token = match.group(1)
-    return base_url, token
-
-
 class NextcloudSource(SourceBase):
     """Nextcloud public share source using WebDAV."""
 
     def __init__(self, config: SyncConfig) -> None:
         self._config = config
-        self._base_url, self._token = _parse_share_url(config.source_url)
+        self._base_url, self._token = parse_share_url(config.source_url)
         self._dav_base = f"{self._base_url}/public.php/dav/files/{self._token}"
         self._auth = httpx.BasicAuth(
             username=self._token,

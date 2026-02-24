@@ -1,0 +1,11 @@
+{
+  "source_dir": "C:/MyFiles/to_upload",
+  "target_url": "https://share.example.com/s/TOKEN",
+  "target_subdir": "/_target_folder",
+  "target_type": "nextcloud",
+  "password": "",
+  "retries": 3,
+  "timeout": 30,
+  "log_level": "INFO",
+  "file_filter": "\\.apk$"
+}

@@ -3,11 +3,10 @@
 from pathlib import Path
 
 import httpx
-import pytest
 import respx
 
 from sync_to_local.config import SyncConfig
-from sync_to_local.sources.nextcloud import NextcloudSource, _parse_share_url
+from sync_to_local.sources.nextcloud import NextcloudSource
 
 PROPFIND_RESPONSE_ROOT = """<?xml version="1.0"?>
 <d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -62,21 +61,6 @@ PROPFIND_RESPONSE_CHILD = """<?xml version="1.0"?>
     </d:propstat>
   </d:response>
 </d:multistatus>"""
-
-
-class TestParseShareUrl:
-    def test_standard_url(self) -> None:
-        base, token = _parse_share_url("https://share.example.com/s/PcLf3SWw2sWLBzk")
-        assert base == "https://share.example.com"
-        assert token == "PcLf3SWw2sWLBzk"
-
-    def test_url_with_trailing_slash(self) -> None:
-        base, token = _parse_share_url("https://share.example.com/s/ABC123/")
-        assert token == "ABC123"
-
-    def test_invalid_url_raises(self) -> None:
-        with pytest.raises(ValueError, match="Cannot extract share token"):
-            _parse_share_url("https://example.com/no-token-here")
 
 
 class TestNextcloudSource:

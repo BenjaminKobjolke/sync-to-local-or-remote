@@ -1,7 +1,7 @@
 [project]
 name = "sync-to-local"
-version = "0.1.0"
-description = "CLI tool to sync files from remote sources (Nextcloud, etc.) to local folders with post-download pipelines"
+version = "0.2.0"
+description = "CLI tool to sync files between remote sources (Nextcloud, etc.) and local folders"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27,<1",
@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 sync-to-local = "sync_to_local:main"
+sync-to-remote = "sync_to_local:main_upload"
 
 [dependency-groups]
 dev = [

@@ -1,8 +1,10 @@
-# sync-to-local
+# sync-to-local-or-remote
 
-CLI tool that syncs files from remote sources (Nextcloud public shares) to local folders with post-download pipelines.
+CLI tools for syncing files between local folders and remote targets (Nextcloud public shares).
 
 ## Features
+
+### sync-to-local (download)
 
 - One-shot sync: run once, download new files, exit
 - Manifest-based change detection (etag tracking)
@@ -10,6 +12,15 @@ CLI tool that syncs files from remote sources (Nextcloud public shares) to local
 - Per-file pipelines: regex-matched command chains (e.g., ffmpeg conversion)
 - Post-sync commands: run final actions after all downloads complete
 - Index-only mode: seed manifest without downloading
+- CLI args + JSON config (CLI overrides config)
+
+### sync-to-remote (upload)
+
+- Upload local files to a remote Nextcloud public share
+- Manifest-based change detection (SHA256 hashing)
+- Recursive folder upload preserving directory structure
+- `--file-filter` regex to limit which files are uploaded
+- Index-only mode: seed manifest without uploading
 - CLI args + JSON config (CLI overrides config)
 
 ## Setup
@@ -20,25 +31,55 @@ install.bat
 
 ## Usage
 
-### With CLI arguments
+### sync-to-local
+
+#### With CLI arguments
 
 ```
 start.bat --source-url "https://share.example.com/s/TOKEN?dir=/_folder" --target-dir ./output
 ```
 
-### With config file
+#### With config file
 
 ```
 start.bat --config config.json
 ```
 
-### Index-only (seed manifest without downloading)
+#### Index-only (seed manifest without downloading)
 
 ```
 start.bat --config config.json --index-only
 ```
 
+### sync-to-remote
+
+#### With CLI arguments
+
+```
+start_upload.bat --source-dir ./local_files --target-url "https://share.example.com/s/TOKEN"
+```
+
+#### With config file
+
+```
+start_upload.bat --config config_upload.json
+```
+
+#### Upload only .apk files
+
+```
+start_upload.bat --config config_upload.json --file-filter "\.apk$"
+```
+
+#### Index-only (seed manifest without uploading)
+
+```
+start_upload.bat --config config_upload.json --index-only
+```
+
 ## CLI Arguments
+
+### sync-to-local
 
 ```
 sync-to-local --source-url URL --target-dir PATH
@@ -54,9 +95,28 @@ sync-to-local --source-url URL --target-dir PATH
 
 The `?dir=` query parameter in `--source-url` is auto-extracted as `--source-subdir`.
 
-## Config File
+### sync-to-remote
 
-See `config_example.json` for a full example.
+```
+sync-to-remote --source-dir PATH --target-url URL
+               [--target-type nextcloud]
+               [--target-subdir /path]
+               [--password PW]
+               [--config config_upload.json]
+               [--manifest-path PATH]
+               [--retries N] [--timeout N]
+               [--log-level DEBUG|INFO|WARNING]
+               [--index-only]
+               [--file-filter REGEX]
+```
+
+The `?dir=` query parameter in `--target-url` is auto-extracted as `--target-subdir`.
+
+`--file-filter` accepts a Python regex pattern. Only files whose relative path matches the pattern are uploaded. Examples: `\.apk$` (APK files only), `^docs/` (files under docs/ folder).
+
+## Config Files
+
+See `config_example.json` for a download example and `config_upload_example.json` for an upload example.
 
 ### Pipelines
 

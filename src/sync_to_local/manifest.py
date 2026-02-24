@@ -19,6 +19,7 @@ class ManifestEntry:
     path: str
     etag: str
     size: int
+    content_hash: str = ""
 
 
 class Manifest:
@@ -35,9 +36,22 @@ class Manifest:
             return True
         return entry.etag != etag
 
+    def is_new_or_changed_by_hash(self, path: str, content_hash: str) -> bool:
+        """Check if a local file is new or has a different content hash."""
+        entry = self.entries.get(path)
+        if entry is None:
+            return True
+        return entry.content_hash != content_hash
+
     def record(self, remote_path: str, etag: str, size: int) -> None:
         """Record a file as downloaded."""
         self.entries[remote_path] = ManifestEntry(path=remote_path, etag=etag, size=size)
+
+    def record_upload(self, path: str, content_hash: str, size: int) -> None:
+        """Record a file as uploaded."""
+        self.entries[path] = ManifestEntry(
+            path=path, etag="", size=size, content_hash=content_hash
+        )
 
     def save(self) -> None:
         """Save manifest to disk using atomic write (write to temp, then rename)."""
@@ -46,7 +60,11 @@ class Manifest:
         data: dict[str, Any] = {
             "version": MANIFEST_VERSION,
             "files": {
-                path: {"etag": entry.etag, "size": entry.size}
+                path: {
+                    "etag": entry.etag,
+                    "size": entry.size,
+                    "content_hash": entry.content_hash,
+                }
                 for path, entry in self.entries.items()
             },
         }
@@ -86,6 +104,7 @@ class Manifest:
                 path=file_path,
                 etag=file_data["etag"],
                 size=file_data["size"],
+                content_hash=file_data.get("content_hash", ""),
             )
 
         return m
