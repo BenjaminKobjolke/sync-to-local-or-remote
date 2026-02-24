@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from sync_to_local.config import PipelineConfig, SyncConfig, load_config, merge_cli_args
+from sync_to_local.config import (
+    PipelineConfig,
+    RouteConfig,
+    SyncConfig,
+    load_config,
+    merge_cli_args,
+)
 
 
 class TestPipelineConfig:
@@ -20,6 +26,18 @@ class TestPipelineConfig:
             p.pattern = "new"  # type: ignore[misc]
 
 
+class TestRouteConfig:
+    def test_create(self) -> None:
+        r = RouteConfig(pattern=r"\.mp3$", target_dir=Path("/audio"))
+        assert r.pattern == r"\.mp3$"
+        assert r.target_dir == Path("/audio")
+
+    def test_frozen(self) -> None:
+        r = RouteConfig(pattern=r"\.mp3$", target_dir=Path("/audio"))
+        with pytest.raises(AttributeError):
+            r.pattern = "new"  # type: ignore[misc]
+
+
 class TestSyncConfig:
     def test_defaults(self) -> None:
         cfg = SyncConfig(source_url="https://example.com/s/abc", target_dir=Path("/tmp/out"))
@@ -30,6 +48,7 @@ class TestSyncConfig:
         assert cfg.timeout == 30
         assert cfg.log_level == "INFO"
         assert cfg.pipelines == []
+        assert cfg.routes == []
         assert cfg.post_sync == []
         assert cfg.index_only is False
         assert cfg.manifest_path is None
@@ -110,6 +129,30 @@ class TestLoadConfig:
         assert cfg.retries == 5
         assert len(cfg.pipelines) == 1
         assert cfg.pipelines[0].pattern == r"\.webm$"
+
+    def test_load_routes_resolves_relative_paths(self, tmp_dir: Path) -> None:
+        config_dir = tmp_dir / "tools" / "sync"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "source_url": "https://share.example.com/s/TOKEN123",
+                    "target_dir": str(tmp_dir / "output"),
+                    "routes": [
+                        {"pattern": r"\.mp3$", "target_dir": "../../Assets/Audio"},
+                        {"pattern": r"\.mp4$", "target_dir": "D:/absolute/path"},
+                    ],
+                }
+            )
+        )
+        cfg = load_config(config_file)
+        assert len(cfg.routes) == 2
+        assert cfg.routes[0].pattern == r"\.mp3$"
+        # Relative path resolved against config_dir
+        assert cfg.routes[0].target_dir == (config_dir / "../../Assets/Audio").resolve()
+        # Absolute path used as-is
+        assert cfg.routes[1].target_dir == Path("D:/absolute/path")
 
     def test_load_missing_file_raises(self, tmp_dir: Path) -> None:
         with pytest.raises(FileNotFoundError):

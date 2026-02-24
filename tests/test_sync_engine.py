@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from sync_to_local.config import PipelineConfig, SyncConfig
+from sync_to_local.config import PipelineConfig, RouteConfig, SyncConfig
 from sync_to_local.manifest import Manifest
 from sync_to_local.sources.base import RemoteFile
 from sync_to_local.sync_engine import SyncEngine
@@ -284,3 +284,140 @@ class TestSyncEnginePostSync:
         engine.run()
 
         mock_runner.run_post_sync.assert_not_called()
+
+
+def _create_file(path: Path, content: str = "data") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+class TestSyncEngineRoutes:
+    def test_routes_move_files_by_pattern(self, tmp_dir: Path) -> None:
+        audio_dir = tmp_dir / "audio"
+        video_dir = tmp_dir / "video"
+        routes = [
+            RouteConfig(pattern=r"\.mp3$", target_dir=audio_dir),
+            RouteConfig(pattern=r"\.mp4$", target_dir=video_dir),
+        ]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        source = MagicMock()
+        source.list_files.return_value = [
+            _make_remote_file("/data/song.mp3"),
+            _make_remote_file("/data/clip.mp4"),
+        ]
+        # Simulate download by creating files
+        def fake_download(rf: object, local_path: Path) -> None:
+            _create_file(local_path)
+
+        source.download_file.side_effect = fake_download
+
+        engine = SyncEngine(config, source, manifest_path)
+        result = engine.run()
+
+        assert result == 0
+        assert (audio_dir / "song.mp3").exists()
+        assert (video_dir / "clip.mp4").exists()
+        # Originals should be gone from target_dir
+        assert not (config.target_dir / "data" / "song.mp3").exists()
+        assert not (config.target_dir / "data" / "clip.mp4").exists()
+
+    def test_routes_first_match_wins(self, tmp_dir: Path) -> None:
+        first_dir = tmp_dir / "first"
+        second_dir = tmp_dir / "second"
+        routes = [
+            RouteConfig(pattern=r"\.mp3$", target_dir=first_dir),
+            RouteConfig(pattern=r"song", target_dir=second_dir),
+        ]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        source = MagicMock()
+        source.list_files.return_value = [_make_remote_file("/data/song.mp3")]
+        source.download_file.side_effect = lambda rf, lp: _create_file(lp)
+
+        engine = SyncEngine(config, source, manifest_path)
+        engine.run()
+
+        # First route matches, not second
+        assert (first_dir / "song.mp3").exists()
+        assert not (second_dir / "song.mp3").exists()
+
+    def test_routes_unmatched_files_stay(self, tmp_dir: Path) -> None:
+        audio_dir = tmp_dir / "audio"
+        routes = [RouteConfig(pattern=r"\.mp3$", target_dir=audio_dir)]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        source = MagicMock()
+        source.list_files.return_value = [
+            _make_remote_file("/data/song.mp3"),
+            _make_remote_file("/data/readme.txt"),
+        ]
+        source.download_file.side_effect = lambda rf, lp: _create_file(lp)
+
+        engine = SyncEngine(config, source, manifest_path)
+        engine.run()
+
+        assert (audio_dir / "song.mp3").exists()
+        # txt file stays in target_dir
+        assert (config.target_dir / "data" / "readme.txt").exists()
+
+    def test_routes_exclude_manifest_file(self, tmp_dir: Path) -> None:
+        catch_all_dir = tmp_dir / "catch_all"
+        routes = [RouteConfig(pattern=r"\.json$", target_dir=catch_all_dir)]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        source = MagicMock()
+        source.list_files.return_value = [_make_remote_file("/data/data.json")]
+        source.download_file.side_effect = lambda rf, lp: _create_file(lp)
+
+        engine = SyncEngine(config, source, manifest_path)
+        engine.run()
+
+        # data.json should be routed
+        assert (catch_all_dir / "data.json").exists()
+
+    def test_routes_skipped_when_no_new_files(self, tmp_dir: Path) -> None:
+        audio_dir = tmp_dir / "audio"
+        routes = [RouteConfig(pattern=r"\.mp3$", target_dir=audio_dir)]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        # Pre-populate manifest so no files are new
+        m = Manifest(manifest_path)
+        m.record("/data/song.mp3", '"e1"', 100)
+        m.save()
+
+        # Put a file in target_dir that already exists
+        _create_file(config.target_dir / "data" / "song.mp3")
+
+        source = MagicMock()
+        source.list_files.return_value = [
+            _make_remote_file("/data/song.mp3", etag='"e1"'),
+        ]
+
+        engine = SyncEngine(config, source, manifest_path)
+        engine.run()
+
+        # Routes should not run since no new files - file stays in place
+        assert not audio_dir.exists()
+        assert (config.target_dir / "data" / "song.mp3").exists()
+
+    def test_routes_create_target_dirs(self, tmp_dir: Path) -> None:
+        deep_dir = tmp_dir / "a" / "b" / "c"
+        routes = [RouteConfig(pattern=r"\.mp3$", target_dir=deep_dir)]
+        config = _make_config(tmp_dir, routes=routes)
+        manifest_path = tmp_dir / "manifest.json"
+
+        source = MagicMock()
+        source.list_files.return_value = [_make_remote_file("/data/song.mp3")]
+        source.download_file.side_effect = lambda rf, lp: _create_file(lp)
+
+        engine = SyncEngine(config, source, manifest_path)
+        engine.run()
+
+        assert (deep_dir / "song.mp3").exists()

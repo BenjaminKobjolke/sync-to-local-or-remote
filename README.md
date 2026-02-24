@@ -124,9 +124,22 @@ Per-file command chains matched by regex. Only the first matching pipeline runs.
 
 Placeholders: `{file}` (full path), `{file_stem}` (no extension), `{file_name}` (filename only), `{file_dir}` (parent directory).
 
+### Routes
+
+File-routing rules that move downloaded files to different directories based on filename patterns. Routes run after all downloads and pipelines complete, before post-sync commands. Skipped in `--index-only` mode and when no new files were downloaded.
+
+Each route has a `pattern` (regex matched against the filename) and a `target_dir` (destination directory). The first matching route wins. Relative paths are resolved against the config file's parent directory; absolute paths are used as-is.
+
+```json
+"routes": [
+  {"pattern": "\\.mp3$", "target_dir": "../../Assets/Audio"},
+  {"pattern": "\\.mp4$", "target_dir": "D:/Unity3D/project/Assets/StreamingAssets"}
+]
+```
+
 ### Post-sync commands
 
-Commands that run once after all downloads and pipelines complete. Only runs if at least one file was downloaded. Skipped in `--index-only` mode.
+Commands that run once after all downloads, pipelines, and routes complete. Only runs if at least one file was downloaded. Skipped in `--index-only` mode.
 
 Placeholders: `{target_dir}` (the target directory path).
 

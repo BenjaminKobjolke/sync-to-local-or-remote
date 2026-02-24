@@ -18,6 +18,14 @@ from sync_to_local.constants import (
 
 
 @dataclass(frozen=True)
+class RouteConfig:
+    """A single file-routing rule: regex pattern + destination directory."""
+
+    pattern: str
+    target_dir: Path
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     """A single post-download pipeline: regex pattern + ordered commands."""
 
@@ -39,6 +47,7 @@ class SyncConfig:
     timeout: int = DEFAULT_TIMEOUT
     log_level: str = DEFAULT_LOG_LEVEL
     pipelines: list[PipelineConfig] = field(default_factory=list)
+    routes: list[RouteConfig] = field(default_factory=list)
     post_sync: list[str] = field(default_factory=list)
     index_only: bool = False
     manifest_path: Path | None = None
@@ -52,7 +61,7 @@ def load_config(config_path: Path) -> SyncConfig:
     with open(config_path) as f:
         data: dict[str, Any] = json.load(f)
 
-    return _dict_to_config(data)
+    return _dict_to_config(data, config_dir=config_path.parent)
 
 
 def merge_cli_args(
@@ -97,7 +106,9 @@ def merge_cli_args(
     return _dict_to_config(merged)
 
 
-def _dict_to_config(data: dict[str, Any]) -> SyncConfig:
+def _dict_to_config(
+    data: dict[str, Any], config_dir: Path | None = None
+) -> SyncConfig:
     """Convert a raw dict to a SyncConfig."""
     pipelines_raw = data.get("pipelines", [])
     pipelines = [
@@ -108,6 +119,18 @@ def _dict_to_config(data: dict[str, Any]) -> SyncConfig:
         )
         for p in pipelines_raw
     ]
+
+    routes_raw = data.get("routes", [])
+    routes: list[RouteConfig] = []
+    for r in routes_raw:
+        raw_dir = Path(r["target_dir"])
+        if raw_dir.is_absolute():
+            resolved = raw_dir
+        elif config_dir is not None:
+            resolved = (config_dir / raw_dir).resolve()
+        else:
+            resolved = raw_dir
+        routes.append(RouteConfig(pattern=r["pattern"], target_dir=resolved))
 
     target_dir = data.get("target_dir", "")
     manifest_path = data.get("manifest_path")
@@ -122,6 +145,7 @@ def _dict_to_config(data: dict[str, Any]) -> SyncConfig:
         timeout=data.get("timeout", DEFAULT_TIMEOUT),
         log_level=data.get("log_level", DEFAULT_LOG_LEVEL),
         pipelines=pipelines,
+        routes=routes,
         post_sync=data.get("post_sync", []),
         index_only=data.get("index_only", False),
         manifest_path=Path(manifest_path) if manifest_path else None,
@@ -146,6 +170,10 @@ def _config_to_dict(config: SyncConfig) -> dict[str, Any]:
                 "delete_original": p.delete_original,
             }
             for p in config.pipelines
+        ],
+        "routes": [
+            {"pattern": r.pattern, "target_dir": str(r.target_dir)}
+            for r in config.routes
         ],
         "post_sync": config.post_sync,
         "index_only": config.index_only,

@@ -23,6 +23,11 @@
       ]
     }
   ],
+  "routes": [
+    {"pattern": "\\.mp3$", "target_dir": "../../Assets/Audio"},
+    {"pattern": "\\.webm$", "target_dir": "D:/Unity3D/project/Assets/Videos"},
+    {"pattern": "\\.mp4$", "target_dir": "../../Assets/StreamingAssets"}
+  ],
   "post_sync": [
     "python rebuild_index.py --dir {target_dir}",
     "echo Sync complete"

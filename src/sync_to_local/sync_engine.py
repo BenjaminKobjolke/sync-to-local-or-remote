@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import shutil
 from pathlib import Path
 
 from sync_to_local.config import SyncConfig
@@ -81,6 +83,10 @@ class SyncEngine:
             self._manifest.record(rf.path, rf.etag, rf.size)
             self._manifest.save()
 
+        # Route files to target directories by pattern
+        if self._config.routes:
+            self._run_routes()
+
         # Run post-sync commands if any files were downloaded
         if self._config.post_sync:
             logger.info("Running post-sync commands...")
@@ -91,3 +97,20 @@ class SyncEngine:
                 had_failure = True
 
         return 1 if had_failure else 0
+
+    def _run_routes(self) -> None:
+        """Move files from target_dir to route destinations based on pattern matching."""
+        manifest_name = self._manifest.path.name
+        for file_path in sorted(self._config.target_dir.rglob("*")):
+            if not file_path.is_file():
+                continue
+            if file_path.name == manifest_name:
+                continue
+            for route in self._config.routes:
+                if re.search(route.pattern, file_path.name):
+                    dest_dir = route.target_dir
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    dest = dest_dir / file_path.name
+                    logger.info("Route: %s -> %s", file_path, dest)
+                    shutil.move(str(file_path), str(dest))
+                    break
